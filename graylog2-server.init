@@ -1,151 +1,103 @@
-#!/bin/bash
+#!/bin/sh
 #
 # graylog2-server - This script starts and stops the graylog2-server daemon
 #
-# chkconfig:   - 85 15
-# description: graylog2 is a syslog implementation that stores logs in MongoDB
+# chkconfig:	345 85 15
+#
+# description:	graylog2 is a syslog implementation that stores logs in MongoDB
+#
+# config:		/etc/graylog2.conf
+# pidfile:		/var/run/graylog2.pid
+#
 
-### BEGIN INIT INFO
-# Provides: 
-# Required-Start:			$network
-# Required-Stop:			$network
-# Default-Stop:				0 1 2 6
-# Short-Description:	Start/stop the graylog2-server daemon
-# Description:				A syslog implementation that stores logs in MongoDB
-### END INIT INFO
+# Source function library
+. /etc/rc.d/init.d/functions
 
-# Source function library.
-. /etc/init.d/functions
-
-# Check networking
+# Get network config
 . /etc/sysconfig/network
-[[ $NETWORKING == no ]] && exit 0
 
-prog="graylog2-server"
-jar="/usr/share/$prog/$prog.jar"
-lockfile="/var/lock/subsys/$prog"
-logfile="/var/log/$prog/$prog.log"
-pidfile="/var/run/$prog.pid"
-
-JAVA_BIN="/usr/bin/java"
-
-unset pid
-
-gl2_run() {
-  # Disable csh style history expansion for safety
-  set +H
-	daemon "( $JAVA_BIN -jar \"$jar\" >\"$logfile\" 2>&1 & echo \"\$!\" >\"$pidfile\" )"
-	pid=$(<"$pidfile")
-  sleep 1
-	if kill -0 "$pid" >/dev/null 2>&1
-	then
-		return 0
-	else
-		return 1
+# Check that networking is up.
+if is_yes "${NETWORKING}"; then
+	if [ ! -f /var/lock/subsys/network -a "$1" != stop -a "$1" != status ]; then
+		msg_network_down "graylog2 server"
+		exit 1
 	fi
-}
+else
+	exit 0
+fi
 
-gl2_status() {
-	[[ -f $pidfile ]] && pid=$(<"$pidfile")
-	[[ -z $pid ]] && return 1
-	if kill -0 "$pid" >/dev/null 2>&1
-	then
-		return 0
-	else
-		return 1
-	fi
-}
+# Get service config - may override defaults
+[ -f /etc/sysconfig/graylog2-server ] && . /etc/sysconfig/graylog2-server
 
-status() {
-	if gl2_status
-	then
-		echo $"$prog (pid $pid) is running..."
-		return 0
-	else
-		if [[ -f $lockfile ]]
-		then
-			echo $"$prog dead but subsys locked"
-			return 2
-		fi
-		echo $"$prog is stopped"
-		return 3
-	fi
-}
+jarfile="/usr/share/java/graylog2-server.jar"
+pidfile="/var/run/graylog2-server.pid"
 
 start() {
-  [[ -r $jar ]] || exit 5
-	gl2_run >/dev/null 2>&1
-	if [[ $? -eq 0 ]]
-	then
-		retval=0
-		touch "$lockfile"
-		success
-	else
-		retval=1
-		failure
+	# Check if the service is already running?
+	if [ -f /var/lock/subsys/graylog2-server ]; then
+		msg_already_running "graylog2 server"
+		return
 	fi
 
-	echo $"Starting $prog: "
-  return "$retval"
+	msg_starting "graylog2 server"
+	# TODO: output redirection
+	# TODO: save pid
+	daemon --fork /usr/bin/java -jar $jarfile
+
+	RETVAL=$?
+	[ $RETVAL -eq 0 ] && touch /var/lock/subsys/graylog2-server
 }
 
 stop() {
-	killproc -p "$pidfile"
-	if [[ $? -eq 0 ]]
-	then
-		retval=0
-		rm -f "$lockfile"
-    success
-	else
-		retval=1
-    failure
+	if [ ! -f /var/lock/subsys/graylog2-server ]; then
+		msg_not_running "graylog2 server"
+		return
 	fi
 
-  echo $"Stopping $prog: "
-  return "$retval"
+	# Stop daemons.
+	msg_stopping "graylog2 server"
+	# TODO: process name is really java
+	killproc --pidfile $pidfile graylog2-server -TERM
+	rm -f /var/lock/subsys/graylog2-server
 }
 
-restart() {
-  stop
-  start
+condrestart() {
+	if [ ! -f /var/lock/subsys/graylog2-server ]; then
+		msg_not_running "graylog2 server"
+		RETVAL=$1
+		return
+	fi
+
+	stop
+	start
 }
 
-reload() {
-  restart
-}
-
-force_reload() {
-  restart
-}
-
+RETVAL=0
+# See how we were called.
 case "$1" in
   start)
-      gl2_status && exit 0
-      $1
-      ;;
+	start
+	;;
   stop)
-      gl2_status || exit 0
-      $1
-      ;;
+	stop
+	;;
   restart)
-      $1
-      ;;
-  reload)
-      gl2_status || exit 7
-      $1
-      ;;
+	stop
+	start
+	;;
+  try-restart)
+	condrestart 0
+	;;
   force-reload)
-      force_reload
-      ;;
+	condrestart 7
+	;;
   status)
-      $1
-      ;;
-  condrestart|try-restart)
-      gl2_status || exit 0
-      restart
-      ;;
+	status --pidfile $pidfile graylog2-server java
+	RETVAL=$?
+	;;
   *)
-      echo $"Usage: $0 {start|stop|status|restart|condrestart|try-restart|reload|force-reload}"
-      exit 2
+	msg_usage "$0 {start|stop|restart|try-restart|reload|force-reload|status}"
+	exit 3
 esac
-exit $?
+
+exit $RETVAL

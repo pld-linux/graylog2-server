@@ -1,8 +1,10 @@
+# TODO
+# - run as dedicated user
 %include	/usr/lib/rpm/macros.java
 Summary:	A syslog implementation that stores logs in MongoDB
 Name:		graylog2-server
 Version:	0.9.6p1
-Release:	0.1
+Release:	0.2
 License:	GPL v3
 Group:		Daemons
 URL:		http://www.graylog2.org/
@@ -64,3 +66,4 @@ fi
 %config(noreplace) %verify(not md5 mtime size) %{_sysconfdir}/graylog2.conf
 %attr(754,root,root) /etc/rc.d/init.d/graylog2-server
 %{_javadir}/graylog2-server*.jar
+%dir %{_localstatedir}/log/%{name}
