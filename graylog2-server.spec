@@ -1,6 +1,5 @@
 # TODO
 # - run as dedicated user
-%include	/usr/lib/rpm/macros.java
 Summary:	A syslog implementation that stores logs in MongoDB
 Name:		graylog2-server
 Version:	0.9.6p1
